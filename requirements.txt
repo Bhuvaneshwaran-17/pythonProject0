@@ -1,4 +1,8 @@
+streamlit
+requests
+pydantic
+psycopg2
 fastapi
-uvicorn
-gunicorn
 pandas
+gunicorn
+uvicorn
