@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # URL for your FastAPI endpoint
-API_URL = "http://localhost:8000/predict_next_action"
+API_URL = "https://pythonproject0-yiqs.onrender.com/predict_next_action"
 
 # Streamlit UI setup
 st.set_page_config(page_title="Action Sequence Predictor", page_icon="🤖", layout="wide")
