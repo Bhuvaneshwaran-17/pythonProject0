@@ -2,8 +2,27 @@ import pandas as pd
 from typing import List, Dict, Union
 from datetime import datetime
 from database import get_db_connection
+import time
+from functools import wraps
 
+def retry_on_connection_error(max_retries=3, delay=1):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except psycopg2.OperationalError as e:
+                    retries += 1
+                    if retries == max_retries:
+                        raise
+                    time.sleep(delay)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
+@retry_on_connection_error()
 def fetch_sequences_for_action(current_action: str) -> Union[List[tuple], Dict[str, str]]:
     try:
         with get_db_connection() as conn:
@@ -19,42 +38,14 @@ def fetch_sequences_for_action(current_action: str) -> Union[List[tuple], Dict[s
                     (current_action,)
                 )
                 data = cursor.fetchall()
-
         if not data:
             return {"error": "No data found for the given action."}
-
         return data
-
     except Exception as e:
         print(f"Error fetching sequences: {e}")
         return {"error": f"Database error: {e}"}
 
-
-def analyze_sequences(data: List[tuple], current_action: str) -> Dict:
-    if isinstance(data, dict) and "error" in data:
-        return data
-
-    # Create a DataFrame for better analysis
-    df = pd.DataFrame(data, columns=['action', 'next_action', 'frequency'])
-    total_occurrences = df['frequency'].sum()
-
-    # Calculate probabilities
-    sequences = []
-    for _, row in df.iterrows():
-        probability = row['frequency'] / total_occurrences
-        sequences.append({
-            'next_action': row['next_action'],
-            'frequency': row['frequency'],
-            'probability': round(probability * 100, 2)
-        })
-
-    return {
-        'current_action': current_action,
-        'total_occurrences': int(total_occurrences),
-        'sequences': sequences
-    }
-
-
+@retry_on_connection_error()
 def track_user_action(action_data: dict) -> Dict[str, str]:
     try:
         with get_db_connection() as conn:
@@ -72,17 +63,16 @@ def track_user_action(action_data: dict) -> Dict[str, str]:
                         (action_data['user_id'],)
                     )
                     last_action = cursor.fetchone()
-
                     # If there was a previous action, record the sequence
                     if last_action:
                         cursor.execute(
                             """
-                            INSERT INTO actions (action_name, next_action_name, created_at)
-                            VALUES (%s, %s, %s)
+                            INSERT INTO actions (user_id, action_name, next_action_name, created_at)
+                            VALUES (%s, %s, %s, %s)
                             """,
-                            (last_action[0], action_data['action_name'], datetime.now())
+                            (action_data.get('user_id'), last_action[0], 
+                             action_data['action_name'], datetime.now())
                         )
-
                 # Record the current action
                 cursor.execute(
                     """
@@ -102,9 +92,7 @@ def track_user_action(action_data: dict) -> Dict[str, str]:
                     )
                 )
                 conn.commit()
-
         return {"status": "success", "message": "Action tracked successfully"}
-
     except Exception as e:
         print(f"Error tracking action: {e}")
         return {"error": f"Failed to track action: {e}"}
