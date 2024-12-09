@@ -24,7 +24,9 @@ def retry_on_connection_error(max_retries=3, delay=1):
 
 @retry_on_connection_error()
 @retry_on_connection_error()
-def analyze_sequences(action_name: str) -> Dict[str, Union[List[Dict], str]]:
+
+@retry_on_connection_error()
+def analyze_sequences(action_name: str) -> Dict[str, Union[List[Dict], str, int, float]]:
     """
     Analyzes the sequence patterns for a given action, returning frequency and probability data.
     
@@ -39,26 +41,43 @@ def analyze_sequences(action_name: str) -> Dict[str, Union[List[Dict], str]]:
         if isinstance(sequences, dict) and "error" in sequences:
             return sequences
             
+        # Ensure we have valid data to process
+        if not sequences:
+            return {
+                "status": "success",
+                "total_sequences": 0,
+                "patterns": []
+            }
+            
         total_occurrences = sum(seq[2] for seq in sequences)
         
         analysis_results = []
         for _, next_action, frequency in sequences:
-            probability = (frequency / total_occurrences) * 100
+            # Ensure all values are JSON serializable
+            probability = float(frequency) / float(total_occurrences) * 100
             analysis_results.append({
-                "next_action": next_action,
-                "frequency": frequency,
-                "probability": round(probability, 2)
+                "next_action": str(next_action),
+                "frequency": int(frequency),
+                "probability": round(float(probability), 2)
             })
             
-        return {
+        result = {
             "status": "success",
-            "total_sequences": total_occurrences,
+            "total_sequences": int(total_occurrences),
             "patterns": analysis_results
         }
         
+        # Verify JSON serialization works
+        json.dumps(result)  # This will raise an error if the data isn't JSON serializable
+        
+        return result
+        
     except Exception as e:
         print(f"Error analyzing sequences: {e}")
-        return {"error": f"Analysis error: {e}"}
+        return {
+            "status": "error",
+            "message": f"Analysis error: {str(e)}"
+        }
 def fetch_sequences_for_action(current_action: str) -> Union[List[tuple], Dict[str, str]]:
     try:
         with get_db_connection() as conn:
