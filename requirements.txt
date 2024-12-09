@@ -1,7 +1,7 @@
 streamlit
 requests
 pydantic
-psycopg2
+psycopg2-binary
 fastapi
 pandas
 gunicorn
