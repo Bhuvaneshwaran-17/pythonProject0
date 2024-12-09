@@ -4,7 +4,7 @@ from datetime import datetime
 from database import get_db_connection
 import time
 from functools import wraps
-
+import psycopg2
 def retry_on_connection_error(max_retries=3, delay=1):
     def decorator(func):
         @wraps(func)
@@ -23,6 +23,42 @@ def retry_on_connection_error(max_retries=3, delay=1):
     return decorator
 
 @retry_on_connection_error()
+@retry_on_connection_error()
+def analyze_sequences(action_name: str) -> Dict[str, Union[List[Dict], str]]:
+    """
+    Analyzes the sequence patterns for a given action, returning frequency and probability data.
+    
+    Args:
+        action_name: The name of the action to analyze
+        
+    Returns:
+        Dictionary containing sequence analysis results or error message
+    """
+    try:
+        sequences = fetch_sequences_for_action(action_name)
+        if isinstance(sequences, dict) and "error" in sequences:
+            return sequences
+            
+        total_occurrences = sum(seq[2] for seq in sequences)
+        
+        analysis_results = []
+        for _, next_action, frequency in sequences:
+            probability = (frequency / total_occurrences) * 100
+            analysis_results.append({
+                "next_action": next_action,
+                "frequency": frequency,
+                "probability": round(probability, 2)
+            })
+            
+        return {
+            "status": "success",
+            "total_sequences": total_occurrences,
+            "patterns": analysis_results
+        }
+        
+    except Exception as e:
+        print(f"Error analyzing sequences: {e}")
+        return {"error": f"Analysis error: {e}"}
 def fetch_sequences_for_action(current_action: str) -> Union[List[tuple], Dict[str, str]]:
     try:
         with get_db_connection() as conn:
